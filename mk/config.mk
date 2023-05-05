@@ -622,7 +622,7 @@ endif
 #   is a totally standard shared object, and should be used to link against.
 #   The '.ta' file is a signed version of the '.so' and should be installed
 #   in the same way as TAs so that they can be found at runtime.
-CFG_ULIBS_SHARED ?= n
+CFG_ULIBS_SHARED ?= y
 
 ifeq (y-y,$(CFG_TA_GPROF_SUPPORT)-$(CFG_ULIBS_SHARED))
 $(error CFG_TA_GPROF_SUPPORT and CFG_ULIBS_SHARED are currently incompatible)
@@ -658,7 +658,7 @@ CFG_DEVICE_ENUM_PTA ?= y
 
 # The attestation pseudo TA provides an interface to request measurements of
 # a TA or the TEE binary.
-CFG_ATTESTATION_PTA ?= n
+CFG_ATTESTATION_PTA ?= y
 $(eval $(call cfg-depends-all,CFG_ATTESTATION_PTA,_CFG_WITH_SECURE_STORAGE))
 
 # RSA key size (in bits) for the attestation PTA. Must be at least 528 given
@@ -692,7 +692,7 @@ CFG_CORE_RESERVED_SHM ?= y
 
 # Enables support for larger physical addresses, that is, it will define
 # paddr_t as a 64-bit type.
-CFG_CORE_LARGE_PHYS_ADDR ?= n
+CFG_CORE_LARGE_PHYS_ADDR ?= y
 
 # Define the maximum size, in bits, for big numbers in the Internal Core API
 # Arithmetical functions. This does *not* influence the key size that may be
