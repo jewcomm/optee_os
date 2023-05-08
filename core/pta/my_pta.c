@@ -16,6 +16,8 @@
 
 #include <mm/core_memprot.h>
 
+// #include <mbedtls/sha256.h>
+
 #define PTA_NAME "my_pta.pta"
 
 #define PAGE_SIZE 4096
@@ -60,7 +62,7 @@ static TEE_Result sys_call_receiver(uint32_t param_types,
 static TEE_Result sys_call_sender(uint32_t param_types,
 	TEE_Param params[4])
 {
-	uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_OUTPUT,
+	uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_OUTPUT,
 						   TEE_PARAM_TYPE_NONE,
 						   TEE_PARAM_TYPE_NONE,
 						   TEE_PARAM_TYPE_NONE);
@@ -76,16 +78,56 @@ static TEE_Result sys_call_sender(uint32_t param_types,
 		return TEE_ERROR_ACCESS_CONFLICT;
 	}
 
-	params[0].value.a = syscall_phys;
-	params[0].value.b = compat_syscall_count;
-
 	paddr_t	pa = (paddr_t)(syscall_phys);
-	uint32_t size_syscall_table = compat_syscall_count;
 
-	core_mmu_add_mapping(MEM_AREA_RAM_NSEC, pa, size_syscall_table * sizeof(unsigned long));
-	unsigned long * compat_syscal_ptr = phys_to_virt(pa, MEM_AREA_RAM_NSEC, sizeof(unsigned long) * size_syscall_table);
+	core_mmu_add_mapping(MEM_AREA_RAM_NSEC, pa, compat_syscall_count * sizeof(unsigned long));
+	unsigned long * syscall_va = phys_to_virt(pa, MEM_AREA_RAM_NSEC, sizeof(unsigned long) * compat_syscall_count);
 
-	IMSG("SYSCALL_ADDR_VA: %lx", compat_syscal_ptr[0]);
+	// params[0].value.a = syscall_va;
+	// params[0].value.b = compat_syscall_count;
+
+	for(int i = 0; i < compat_syscall_count; i++){
+		IMSG("[SYSCALL #%i]: %lx", i, syscall_va[i]);
+	}
+
+	void *ctx = NULL;
+
+	res = crypto_hash_alloc_ctx(&ctx, TEE_ALG_SHA256);
+	if(res) return res;
+
+	IMSG("CRYPTO_HASH_ALLCOT_CTX ok");
+	res = crypto_hash_init(ctx);
+	if(res) goto out;
+
+	// hash get data in LE format
+	IMSG("crypto_hash_init ok");
+	res = crypto_hash_update(ctx, syscall_va, (compat_syscall_count * sizeof(unsigned long)));
+	if(res) goto out;
+
+	IMSG("crypto_hash_update ok");
+
+	// res = crypto_hash_update(ctx, syscall_va, (compat_syscall_count * sizeof(unsigned long *)));
+	if(res) goto out;
+	// IMSG("crypto_hash_update ok");
+
+	uint8_t digest[TEE_SHA256_HASH_SIZE] = { };
+	res = crypto_hash_final(ctx, digest, 32);
+	memcpy(params[0].memref.buffer, digest, 32);
+	IMSG("crypto_hash_final ok");
+
+
+out:
+	crypto_hash_free_ctx(ctx);
+	IMSG("crypto_hash_free_ctx ok");
+
+	IMSG("[SYSCALL HASH]: %s", digest);
+	IMSG("");
+	IMSG("");
+	for(int i = 0; i < 32; i++){
+		IMSG("[SYSCALL HASH]: %c (%x)", digest[i], digest[i]);
+	}
+
+	core_mmu_remove_mapping(MEM_AREA_RAM_NSEC, pa, compat_syscall_count * sizeof(unsigned long));
 
 	return res;
 }
