@@ -121,8 +121,10 @@ SRCS_TLS += ssl_ticket.c
 SRCS_TLS += ssl_tls.c
 
 srcs-y += $(addprefix mbedtls/library/, $(SRCS_CRYPTO))
-srcs-$(sm-$(ta-target)) += $(addprefix mbedtls/library/, $(SRCS_X509))
-srcs-$(sm-$(ta-target)) += $(addprefix mbedtls/library/, $(SRCS_TLS))
+#srcs-$(sm-$(ta-target)) += $(addprefix mbedtls/library/, $(SRCS_X509))
+#srcs-$(sm-$(ta-target)) += $(addprefix mbedtls/library/, $(SRCS_TLS))
+srcs-y += $(addprefix mbedtls/library/, $(SRCS_X509))
+srcs-y += $(addprefix mbedtls/library/, $(SRCS_TLS))
 
 cflags-lib-y += -Wno-redundant-decls
 cflags-lib-y += -Wno-switch-default
