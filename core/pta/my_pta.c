@@ -7,6 +7,7 @@
 #include <mm/file.h>
 #include <stdlib.h>
 #include <string.h>
+#include <memory.h>
 #include <tee/entry_std.h>
 #include <tee/tee_fs.h>
 #include <tee/tee_pobj.h>
@@ -18,6 +19,8 @@
 
 #define PTA_NAME "syscall_pta.pta"
 
+#define ARM64_SYS_RESTART_SYSCALL 0xffff80000809c080ull
+
 #define SYSCALL_PTA_UUID { 0x2a38dd39, 0x3414, 0x4b58, \
 		{ 0xa3, 0xbd, 0x73, 0x91, 0x8a, 0xe6, 0x2e, 0x68 } }
 
@@ -26,6 +29,8 @@
 
 uint32_t compat_syscall_count = 0;
 unsigned long * syscall_va = NULL;
+uint64_t syscall_shift;
+bool syscall_shift_sign;
 
 static TEE_Result sys_call_receiver(uint32_t param_types,
 	TEE_Param params[4])
@@ -54,9 +59,32 @@ static TEE_Result sys_call_receiver(uint32_t param_types,
 	syscall_va = core_mmu_add_mapping(MEM_AREA_RAM_NSEC, pa, 
 										compat_syscall_count * sizeof(unsigned long));
 
+	if(syscall_va[0] > ARM64_SYS_RESTART_SYSCALL) {
+        syscall_shift = (uint64_t)syscall_va[0] - ARM64_SYS_RESTART_SYSCALL;
+        syscall_shift_sign = true;
+    } else {
+        syscall_shift = ARM64_SYS_RESTART_SYSCALL - (uint64_t)syscall_va[0];
+        syscall_shift_sign = false;
+    }
+
 	DMSG("[\"%s\"]SYSCALL COUNT: %ld", PTA_NAME, compat_syscall_count);
 	DMSG("[\"%s\"]SYSCALL_VA(in OPTEE): %lx", PTA_NAME, syscall_va);
-		
+
+	DMSG("[SYSCALL 0]: %lx", syscall_va[0]);
+	DMSG("[SYSCALL shift]: %lu", syscall_shift);
+	DMSG("[SYSCALL shift]: %lx", syscall_shift);
+	DMSG("[SYSCALL shift]: %i", syscall_shift_sign);
+
+	if(syscall_shift_sign){
+		if((syscall_va[0] - syscall_shift) != ARM64_SYS_RESTART_SYSCALL){
+			DMSG("ERROR WITH SYSCALL_SHIFTING: %lx", ARM64_SYS_RESTART_SYSCALL + syscall_shift);
+		}
+	} else  {
+		if((syscall_va[0] + syscall_shift) != ARM64_SYS_RESTART_SYSCALL){
+			DMSG("ERROR WITH SYSCALL_SHIFTING: %lx", ARM64_SYS_RESTART_SYSCALL - syscall_shift);
+		}
+	}
+	
 	return res;
 }
 
@@ -83,8 +111,13 @@ static TEE_Result sys_call_checker(uint32_t param_types,
 		return TEE_ERROR_ACCESS_CONFLICT;
 	}
 
+	unsigned long syscall_copy[compat_syscall_count];
+	memset(syscall_copy, 0, (compat_syscall_count * sizeof(unsigned long)));
+	// memcpy(syscall_copy, syscall_va, (compat_syscall_count * sizeof(unsigned long)));
+
 	for(uint32_t i = 0; i < compat_syscall_count; i++){
-		DMSG("[SYSCALL #%i]: %lx", i, syscall_va[i]);
+		syscall_copy[i] = syscall_va[i] + (syscall_shift_sign? -syscall_shift: syscall_shift);
+		DMSG("[SYSCALL #%i]: %lx \t(without KASLR): %lx", i, syscall_va[i], syscall_copy[i]);
 	}
 
 	res = crypto_hash_alloc_ctx(&ctx, TEE_ALG_SHA256);
@@ -96,7 +129,7 @@ static TEE_Result sys_call_checker(uint32_t param_types,
 
 	// hash get data in LE format
 	DMSG("crypto_hash_init ok");
-	res = crypto_hash_update(ctx, (const uint8_t *)syscall_va, (compat_syscall_count * sizeof(unsigned long)));
+	res = crypto_hash_update(ctx, (const uint8_t *)syscall_copy, (compat_syscall_count * sizeof(unsigned long)));
 	if(res) goto out;
 
 	DMSG("crypto_hash_update ok");

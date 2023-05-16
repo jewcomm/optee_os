@@ -392,7 +392,7 @@ CFG_REE_FS_ALLOW_RESET ?= n
 ifneq ($(EARLY_TA_PATHS)$(CFG_IN_TREE_EARLY_TAS),)
 $(call force,CFG_EARLY_TA,y)
 else
-CFG_EARLY_TA ?= n
+CFG_EARLY_TA ?= y
 endif
 
 ifeq ($(CFG_EARLY_TA),y)
